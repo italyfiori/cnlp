@@ -113,10 +113,10 @@ class HMM(object):
 
     def load_mode(self, model_path):
         model_params = pickle.load(open(model_path, 'rb'))
-        self.states = model_params.states
-        self.init_probs = model_params.init_probs
-        self.trans_probs = model_params.trans_probs
-        self.emit_probs = model_params.emit_probs
+        self.states = model_params['states']
+        self.init_probs = model_params['init_probs']
+        self.trans_probs = model_params['trans_probs']
+        self.emit_probs = model_params['emit_probs']
 
     def save_mode(self, model_path):
         model_params = {
