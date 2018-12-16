@@ -80,8 +80,8 @@ class HMM(object):
             viterbi_path[state] = [state]
 
         for i in range(1, len(observe_seq)):
-            # 防止概率过小
-            if sum(viterbi_matrix[-1].values) < 1e-100:
+            # 防止路径联合概率过小
+            if sum(viterbi_matrix[-1].values()) < 1e-100:
                 viterbi_matrix[-1] = {state: prob * 1e100 for state, prob in viterbi_matrix[-1].items()}
 
             viterbi_matrix.append({})
