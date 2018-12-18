@@ -1,4 +1,4 @@
-.pyc
+*.pyc
 .ipynb_checkpoints/test-checkpoint.ipynb
 .idea/
 *.pyc

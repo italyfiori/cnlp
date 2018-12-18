@@ -42,4 +42,4 @@ class BiMatch(object):
             return mm_words if mm_single_word_num < rm_single_word_num else rm_words
         # 正反切分单词数相同且单字单词数也相同时，返回最大逆向切分
         else:
-            return rm_single_word_num
+            return rm_words
