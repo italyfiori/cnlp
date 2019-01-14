@@ -44,3 +44,42 @@ class Corpus(object):
                 corpus.append((words, labels))
 
             return corpus
+
+    @staticmethod
+    def read_crf_corpus(filename):
+        """
+        Read a corpus file with a format used in CoNLL.
+        """
+        data = list()
+        data_string_list = list(open(filename))
+
+        cols = 0
+        X = list()
+        Y = list()
+        for data_string in data_string_list:
+            words = data_string.strip().split()
+
+            if len(words) is not 0:
+                # 保证序列的每一个元素的列数相同
+                if cols is 0:
+                    cols = len(words)
+                assert len(words) == cols
+
+                # 非空行时取数据
+                X.append(words[:-1])
+                Y.append(words[-1])
+            else:
+                # 遇到空行时将前一个序列插入集合
+                if len(X) != 0:
+                    data.append((X, Y))
+
+                # 新序列置空
+                X = list()
+                Y = list()
+
+        # 最后一个序列插入集合
+        if len(X) > 0:
+            data.append((X, Y))
+
+        # data.shape: m * 2 * Tm
+        return data
