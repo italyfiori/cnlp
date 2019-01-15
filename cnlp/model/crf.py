@@ -5,10 +5,11 @@ Author:  yulu04
 Date:    2019/1/8
 Desc:
 """
-Y_START_LABEL = '*label_start*'
-Y_NONE_LABEL = '*label_none*'
-
 import numpy as np
+
+Y_START_LABEL = '|-'
+Y_START_LABEL_INDEX = 0
+Y_NONE_LABEL_INDEX = -1
 
 
 class Crf(object):
@@ -44,11 +45,11 @@ class Crf(object):
         pass
 
     # 计算转移概率矩阵
-    def generate_X_trans_matrix(self, X):
+    def generate_seq_trans_matrix(self, X):
         pass
 
     # 计算条件概率
-    def generate_x_trans_matrix(self, weights, X, t):
+    def generate_trans_matrix(self, weights, X, t):
         x_trans_matrix = np.zeros(len(self.labels_dict), len(self.labels_dict))
         x_feature_funcs = self.get_feature_funcs_from_dict(X, t)
         for (prev, y), feature_ids in x_feature_funcs.items():
@@ -76,21 +77,24 @@ class Crf(object):
         :param data:
         :return:
         """
-        labels_num = 0
+        self.labels_dict[Y_START_LABEL] = Y_START_LABEL_INDEX
+
         for X, Y in data:
             for t in range(len(X)):
                 x_features = self.get_x_features_from_template(X, t)
                 y = Y[t]
                 y_prev = Y[t - 1] if t > 0 else Y_START_LABEL
-                y_features = [(y_prev, y), (Y_NONE_LABEL, y)]
-
-                # 生成特征函数的词典, 形式为 { x_feature : { y_feature : feature_id } }
-                self.fill_features_dict(x_features, y_features)
 
                 # 生成状态词典, 形式为 { y : y_id }
                 if y not in self.labels_dict:
-                    self.labels_dict[y] = labels_num
-                    labels_num += 1
+                    self.labels_dict[y] = len(self.labels_dict)
+
+                y_idx = self.labels_dict[y]
+                y_prev_idx = self.labels_dict[y_prev]
+                y_features = [(y_prev_idx, y_idx), (Y_NONE_LABEL_INDEX, y_idx)]
+
+                # 生成特征函数的词典, 形式为 { x_feature : { y_feature : feature_id } }
+                self.fill_features_dict(x_features, y_features)
 
     def data2features(self, data):
         """
