@@ -30,6 +30,12 @@ class Crf(object):
         self.features_dict = {}  # { x_feature : { y_feature : feature_id } }
         self.features_count = {}  # { feature_id : counts }
         self.labels_dict = {}  # 特征标签dict { y : y_id}
+
+        self.generate_feature_dict(data)
+
+        # 权重初始化
+        self.weights = np.zeros((len(self.features_count), 1))
+
         pass
 
     # 预测标记
@@ -44,20 +50,66 @@ class Crf(object):
     def calc_gradient(self, weights, data):
         pass
 
-    # 计算转移概率矩阵
-    def generate_seq_trans_matrix(self, X):
-        pass
+    def generate_seq_trans_matrix(self, weights, X):
+        """
+        计算X在所有时刻的转移概率矩阵 M1(y1_prev, y1|X), M2(y2_prev, y2|X), ......
+        :param weights:
+        :param X:
+        :return: T * labels_num * labels_num
+        """
+        trans_matrix_list = []
 
-    # 计算条件概率
+        for t in range(len(X)):
+            trans_matrix = self.generate_trans_matrix(weights, X, t)
+            trans_matrix_list.append(trans_matrix)
+
+            if t == 0:
+                # 起始时刻， y_prev都为START状态， 其他状态的转移概率为0
+                trans_matrix[Y_START_LABEL_INDEX + 1:] = 0
+            else:
+                # 非起始时刻, y_prev和y都不能为START状态，相应的状态转移概率为0
+                trans_matrix[:, Y_START_LABEL_INDEX] = 0
+                trans_matrix[Y_START_LABEL_INDEX, :] = 0
+
+        return trans_matrix_list
+
     def generate_trans_matrix(self, weights, X, t):
-        x_trans_matrix = np.zeros(len(self.labels_dict), len(self.labels_dict))
-        x_feature_funcs = self.get_feature_funcs_from_dict(X, t)
-        for (prev, y), feature_ids in x_feature_funcs.items():
-            pass
+        """
+        计算转移概率矩阵: Mt(yt_prev, yt|X)
+        :param weights:
+        :param X:
+        :param t:
+        :return: labels_num * labels_num
+        """
+        labels_num = len(self.labels_dict)
+        trans_matrix = np.zeros(labels_num, labels_num)
+
+        feature_funcs = self.get_feature_funcs_from_dict(X, t)
+        for (y_prev, y), feature_ids in feature_funcs.items():
+            # 特征函数与权重的内积
+            weights_sum = [weights[feature_id] for feature_id in feature_ids]
+            if y_prev != Y_NONE_LABEL_INDEX:
+                trans_matrix[y_prev, y] = weights_sum
+
+        return trans_matrix
 
     # 计算前向概率、后向概率和归一化因子
-    def forward_backward(self, X):
-        pass
+    def forward_backward(self, X, trans_matrix_list):
+        T = len(X)
+
+        alpha_matrix = np.zeros((T, len(self.labels_dict)))  # T * labels_num
+        beta_matrix = np.zeros((T, len(self.labels_dict)))  # T * labels_num
+
+        alpha_matrix[0][Y_START_LABEL_INDEX] = 1.0
+        for t in range(1, T):
+            alpha_matrix[t] = np.dot(alpha_matrix[t - 1], trans_matrix_list[t])
+
+        beta_matrix[-1] = 1.0
+        for t in range(T-2, -1, -1):
+            beta_matrix[t] = np.dot(trans_matrix_list[t+1], beta_matrix[t].transpose())
+
+        Z = sum(alpha_matrix[T-1])
+        return alpha_matrix, beta_matrix, Z
 
     # 生成特征函数
     def generate_features(self, data):
