@@ -37,12 +37,20 @@ class Crf(object):
     def predict(self, X):
         pass
 
-    # 计算似然函数
-    def calc_likelihood_and_gradient(self, weights, data, squared_sigma):
-        feature_expects = np.zeros((len(self.features_counts)))
+    # 计算似然函数和梯度
+    def calc_likelihood_and_gradient(self, data, weights, features_counts, squared_sigma):
+        """
+
+        :param data: 训练集
+        :param weights: 特征函数权重
+        :param features_counts: 特征函数的经验概率
+        :param squared_sigma: 惩罚因子
+        :return: 似然函数值和梯度
+        """
+        # 初始化特征函数的数学期望
+        feature_expects = np.zeros((len(features_counts)))
 
         total_Z = 0
-
         for X, _ in data:
             # 计算转移概率矩阵
             trans_matrix_list = self.generate_seq_trans_matrix(weights, X)
@@ -52,30 +60,31 @@ class Crf(object):
             total_Z += log(Z)
 
             for t in range(len(X)):
-
+                # 观测序列X在t时刻的特征函数集合
                 feature_funcs = self.get_feature_funcs_from_dict(X, t)
                 for (y_prev, y), feature_ids in feature_funcs.items():
-                    # 计算概率 Pi(y_prev, y|X)
+                    # 计算概率 P(yi_prev, yi|X)
                     feature_prob = alpha_matrix[t, y_prev] * trans_matrix_list[t][y_prev, y] * \
                                    beta_matrix[t + 1, y] / Z
+                    # 计算特征函数的数学期望
                     for feature_id in feature_ids:
                         feature_expects[feature_id] += feature_prob
 
-        # 似然函数
-        likelihood = np.dot(self.features_counts, weights) - total_Z + \
+        # 计算似然函数值(标量)
+        likelihood = np.dot(features_counts, weights) - total_Z + \
                      np.sum(np.dot(weights, weights)) / (squared_sigma * 2)
 
-        # 计算梯度
-        gradient = self.features_counts - feature_expects - weights / squared_sigma
+        # 计算梯度(向量)
+        gradient = features_counts - feature_expects - weights / squared_sigma
 
         return likelihood, gradient
 
     def generate_seq_trans_matrix(self, weights, X):
         """
-        计算X在所有时刻的转移概率矩阵 M1(y1_prev, y1|X), M2(y2_prev, y2|X), ......
-        :param weights:
-        :param X:
-        :return: T * labels_num * labels_num
+        计算X在所有时刻的转移概率矩阵组成的列表
+        :param weights: 特征函数权重
+        :param X: 观测序列X
+        :return: 所有时刻的转移概率矩阵组成的列表，大小为T * (labels_num, labels_num)， t时刻的转移概率矩阵为: Mt(yt_prev, yt|X)
         """
         trans_matrix_list = []
 
@@ -87,11 +96,12 @@ class Crf(object):
 
     def generate_trans_matrix(self, weights, X, t):
         """
+        计算X在t时刻的转移概率矩阵
         计算转移概率矩阵: Mi(yi_prev, yi|X)
-        :param weights:
-        :param X:
-        :param t:
-        :return: labels_num * labels_num
+        :param weights: 特征函数权重
+        :param X: 观测序列X
+        :param t: 时刻t
+        :return: 转移概率矩阵, 大小为(labels_num, labels_num), M(y_prev, y|X)
         """
         labels_num = len(self.labels_dict)
         trans_matrix = np.zeros(labels_num, labels_num)
@@ -113,8 +123,13 @@ class Crf(object):
 
         return np.exp(trans_matrix)
 
-    # 计算前向概率、后向概率和归一化因子
     def forward_backward(self, X, trans_matrix_list):
+        """
+        计算前向概率、后向概率和归一化因子
+        :param X: 观测序列X (T, 1)
+        :param trans_matrix_list: (T )
+        :return: 前向概率alpha矩阵(T+1, labels_num), 后向概率矩阵beta(T+1, labels_num), 归一化因子Z(标量)
+        """
         matrix_len = len(X) + 1
         alpha_matrix = np.zeros((matrix_len, len(self.labels_dict)))  # T + 1 * labels_num
         beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))  # T + 1 * labels_num
