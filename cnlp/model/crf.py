@@ -6,6 +6,7 @@ Date:    2019/1/8
 Desc:
 """
 import numpy as np
+from math import *
 
 Y_START_LABEL = '|-'
 Y_START_LABEL_INDEX = 0
@@ -13,11 +14,9 @@ Y_NONE_LABEL_INDEX = -1
 
 
 class Crf(object):
-    features_num = 0  # 用于生成feature_id
-    features_dict = {}  # { x_feature : { y_feature : feature_id } }
-    features_count = {}  # { feature_id : counts }
-    labels_dict = {}  # 特征标签dict { y_feature: y_feature_id}
-
+    features_dict = None  # { x_feature : { y_feature : feature_id } }
+    features_counts = None  # np array { feature_id : counts }
+    labels_dict = None  # 特征标签dict { y_feature: y_feature_id}
     weights = None
     features = None
 
@@ -26,29 +25,50 @@ class Crf(object):
 
     # 训练模型
     def train(self, data):
-        self.features_num = 0  # 用于生成feature_id
         self.features_dict = {}  # { x_feature : { y_feature : feature_id } }
-        self.features_count = {}  # { feature_id : counts }
+        self.features_counts = None  # { feature_id : counts }
         self.labels_dict = {}  # 特征标签dict { y : y_id}
 
         self.generate_feature_dict(data)
 
-        # 权重初始化
-        self.weights = np.zeros((len(self.features_count), 1))
-
-        pass
+        self.weights = np.zeros((len(self.features_counts), 1))
 
     # 预测标记
     def predict(self, X):
         pass
 
     # 计算似然函数
-    def calc_likelihood(self, weights, data):
-        pass
+    def calc_likelihood_and_gradient(self, weights, data, squared_sigma):
+        feature_expects = np.zeros((len(self.features_counts)))
 
-    # 计算梯度
-    def calc_gradient(self, weights, data):
-        pass
+        total_Z = 0
+
+        for X, _ in data:
+            # 计算转移概率矩阵
+            trans_matrix_list = self.generate_seq_trans_matrix(weights, X)
+            # 计算前向后向概率
+            alpha_matrix, beta_matrix, Z = self.forward_backward(X, trans_matrix_list)
+            # 归一化因子加和
+            total_Z += log(Z)
+
+            for t in range(len(X)):
+
+                feature_funcs = self.get_feature_funcs_from_dict(X, t)
+                for (y_prev, y), feature_ids in feature_funcs.items():
+                    # 计算概率 Pi(y_prev, y|X)
+                    feature_prob = alpha_matrix[t, y_prev] * trans_matrix_list[t][y_prev, y] * \
+                                   beta_matrix[t + 1, y] / Z
+                    for feature_id in feature_ids:
+                        feature_expects[feature_id] += feature_prob
+
+        # 似然函数
+        likelihood = np.dot(self.features_counts, weights) - total_Z + \
+                     np.sum(np.dot(weights, weights)) / (squared_sigma * 2)
+
+        # 计算梯度
+        gradient = self.features_counts - feature_expects - weights / squared_sigma
+
+        return likelihood, gradient
 
     def generate_seq_trans_matrix(self, weights, X):
         """
@@ -63,19 +83,11 @@ class Crf(object):
             trans_matrix = self.generate_trans_matrix(weights, X, t)
             trans_matrix_list.append(trans_matrix)
 
-            if t == 0:
-                # 起始时刻， y_prev都为START状态， 其他状态的转移概率为0
-                trans_matrix[Y_START_LABEL_INDEX + 1:] = 0
-            else:
-                # 非起始时刻, y_prev和y都不能为START状态，相应的状态转移概率为0
-                trans_matrix[:, Y_START_LABEL_INDEX] = 0
-                trans_matrix[Y_START_LABEL_INDEX, :] = 0
-
         return trans_matrix_list
 
     def generate_trans_matrix(self, weights, X, t):
         """
-        计算转移概率矩阵: Mt(yt_prev, yt|X)
+        计算转移概率矩阵: Mi(yi_prev, yi|X)
         :param weights:
         :param X:
         :param t:
@@ -91,29 +103,34 @@ class Crf(object):
             if y_prev != Y_NONE_LABEL_INDEX:
                 trans_matrix[y_prev, y] = weights_sum
 
-        return trans_matrix
+        if t == 0:
+            # 起始时刻， y_prev都为START状态， 其他状态的转移概率为0
+            trans_matrix[Y_START_LABEL_INDEX + 1:] = 0
+        else:
+            # 非起始时刻, y_prev和y都不能为START状态，相应的状态转移概率为0
+            trans_matrix[:, Y_START_LABEL_INDEX] = 0
+            trans_matrix[Y_START_LABEL_INDEX, :] = 0
+
+        return np.exp(trans_matrix)
 
     # 计算前向概率、后向概率和归一化因子
     def forward_backward(self, X, trans_matrix_list):
-        T = len(X)
-
-        alpha_matrix = np.zeros((T, len(self.labels_dict)))  # T * labels_num
-        beta_matrix = np.zeros((T, len(self.labels_dict)))  # T * labels_num
+        matrix_len = len(X) + 1
+        alpha_matrix = np.zeros((matrix_len, len(self.labels_dict)))  # T + 1 * labels_num
+        beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))  # T + 1 * labels_num
 
         alpha_matrix[0][Y_START_LABEL_INDEX] = 1.0
-        for t in range(1, T):
-            alpha_matrix[t] = np.dot(alpha_matrix[t - 1], trans_matrix_list[t])
+        for t in range(1, matrix_len):
+            # alpha_matrix[t].shape: labels_num * 1,
+            # trans_matrix_list.shape: labels_num * labels *num
+            alpha_matrix[t] = np.dot(alpha_matrix[t - 1].T, trans_matrix_list[t - 1])
 
         beta_matrix[-1] = 1.0
-        for t in range(T-2, -1, -1):
-            beta_matrix[t] = np.dot(trans_matrix_list[t+1], beta_matrix[t].transpose())
+        for t in range(matrix_len - 2, -1, -1):
+            beta_matrix[t] = np.dot(trans_matrix_list[t], beta_matrix[t + 1])
 
-        Z = sum(alpha_matrix[T-1])
+        Z = sum(alpha_matrix[-1])
         return alpha_matrix, beta_matrix, Z
-
-    # 生成特征函数
-    def generate_features(self, data):
-        pass
 
     # 保存模型
     def save_model(self):
@@ -150,8 +167,8 @@ class Crf(object):
 
     def data2features(self, data):
         """
-        将观测序列数据转换成特征函数的表示形式, m个样本, 每个样本长度为T, 每个时刻有K个特征函数
-        一组特征函数的形式为:  { (y_prev, y) : feature_ids }
+        将观测序列数据转换成特征函数的表示形式。 m个样本, 每个样本长度为T, 每个时刻有K个特征函数
+        特征函数的形式为:  { (y_prev, y) : feature_ids }
         :param data:
         :return:
         """
@@ -176,14 +193,13 @@ class Crf(object):
             for y_feature in y_features:
                 if y_feature not in self.features_dict[x_feature]:
                     # 首次出现的特征函数, 保存到词典, 计数为1
-                    feature_id = self.features_num
+                    feature_id = len(self.features_counts)
                     self.features_dict[x_feature][y_feature] = feature_id
-                    self.features_count[feature_id] = 1
-                    self.features_num += 1
+                    self.features_counts[feature_id] = 1
                 else:
                     # 非首次出现的特征函数, 计数加1
                     feature_id = self.features_dict[x_feature][y_feature]
-                    self.features_count[feature_id] += 1
+                    self.features_counts[feature_id] += 1
 
     def get_feature_funcs_from_dict(self, X, t):
         """
