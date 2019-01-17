@@ -8,48 +8,49 @@ Desc:
 import numpy as np
 from math import *
 
-Y_START_LABEL = '|-'
-Y_START_LABEL_INDEX = 0
-Y_NONE_LABEL_INDEX = -1
+START_LABEL = '|-'
+START_LABEL_INDEX = 0
+NONE_LABEL_INDEX = -1
 
 
 class Crf(object):
-    features_dict = None  # { x_feature : { (y_prev, y) : feature_id } }
-    labels_dict = None  # 特征标签dict { y: y_id}
-    labels_index = {}
-    features_counts = None  # numpy array { feature_id : counts }
-    weights = None
 
     def __init__(self):
-        pass
+        self.features_dict = None  # 特征词典 { x_feature : { (y_prev, y) : feature_id } }
+        self.labels_dict = None  # 特征标签 { label: label_id}
+        self.labels_index = None  # 特征标签 {label_id : label}
+        self.features_counts = None  # 特征数量 { feature_id : counts }
+        self.weights = None  # 特征权重
 
     # 训练模型
     def train(self, data):
         self.features_dict = {}
         self.labels_dict = {}
         self.labels_index = {}
+        self.features_counts = {}
 
         self.generate_features(data)
         self.weights = np.zeros((len(self.features_counts), 1))
 
     # 预测标记
     def predict(self, observe_seq):
-        # 计算观测序列的转移概率矩阵序列
+        # 计算观测序列的非规范化转移概率矩阵序列
         trans_matrix_list = self.generate_trans_matrix_list(observe_seq)
 
         # 保存状态路径的最大值概率值, 和最优状态路径
         viterbi_matrix = []
         viterbi_path = {}
 
+        # 初始状态概率
         viterbi_matrix.append({})
         for label in self.labels_index:
-            viterbi_matrix[0][label] = trans_matrix_list[0][Y_START_LABEL_INDEX, label]
+            viterbi_matrix[0][label] = trans_matrix_list[0][START_LABEL_INDEX, label]
             viterbi_path[label] = [label]
 
         for t in range(1, len(observe_seq)):
-            # 防止路径联合概率过小
-            if sum(viterbi_matrix[-1].values()) < 1e-100:
-                viterbi_matrix[-1] = {label: prob * 1e100 for label, prob in
+            # 防止路径联合概率过大
+            if sum(viterbi_matrix[-1].values()) > 1e250:
+                viterbi_matrix[-1] = {label: prob * 1e-250 for label, prob in
                                       viterbi_matrix[-1].items()}
 
             trans_matrix = trans_matrix_list[t]
@@ -57,8 +58,8 @@ class Crf(object):
             viterbi_path_tmp = {}
 
             for cur_label in self.labels_index:
-                cur_prob, prev_label = max([(viterbi_matrix[-1][cur_label] * trans_matrix[t][prev_label, cur_label], prev_label)
-                                            for prev_label in self.labels_index])
+                cur_prob, prev_label = max([(viterbi_matrix[-1][prev_label] * trans_matrix[
+                    prev_label, cur_label], prev_label) for prev_label in self.labels_index])
 
                 viterbi_matrix[t][cur_label] = cur_prob
                 viterbi_path_tmp[cur_label] = viterbi_path[prev_label] + [cur_label]
@@ -112,7 +113,7 @@ class Crf(object):
 
     def generate_trans_matrix_list(self, weights, X):
         """
-        计算观测序列X在所有时刻的转移概率矩阵组成的列表
+        计算观测序列X在所有时刻的非规范化转移概率矩阵组成的列表
         :param weights: 特征函数权重
         :param X: 观测序列X
         :return: X在所有时刻的转移概率矩阵列表[ Mt(yt_prev, yt|X) ]，大小为(T, labels_num, labels_num)
@@ -140,16 +141,16 @@ class Crf(object):
         for (y_prev, y), feature_ids in feature_funcs.items():
             # 特征函数与权重的内积
             weights_sum = [weights[feature_id] for feature_id in feature_ids]
-            if y_prev != Y_NONE_LABEL_INDEX:
+            if y_prev != NONE_LABEL_INDEX:
                 trans_matrix[y_prev, y] += weights_sum
 
         if t == 0:
             # 起始时刻， y_prev都为START状态， 其他状态的转移概率为0
-            trans_matrix[Y_START_LABEL_INDEX + 1:] = 0
+            trans_matrix[START_LABEL_INDEX + 1:] = 0
         else:
             # 非起始时刻, y_prev和y都不能为START状态，相应的状态转移概率为0
-            trans_matrix[:, Y_START_LABEL_INDEX] = 0
-            trans_matrix[Y_START_LABEL_INDEX, :] = 0
+            trans_matrix[:, START_LABEL_INDEX] = 0
+            trans_matrix[START_LABEL_INDEX, :] = 0
 
         return np.exp(trans_matrix)
 
@@ -165,7 +166,7 @@ class Crf(object):
         beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))
 
         # 计算前向概率
-        alpha_matrix[0][Y_START_LABEL_INDEX] = 1.0
+        alpha_matrix[0][START_LABEL_INDEX] = 1.0
         for t in range(1, matrix_len):
             alpha_matrix[t] = np.dot(alpha_matrix[t - 1].T, trans_matrix_list[t - 1])
 
@@ -208,20 +209,20 @@ class Crf(object):
         :param data:
         :return:
         """
-        self.labels_dict[Y_START_LABEL] = Y_START_LABEL_INDEX
+        self.labels_dict[START_LABEL] = START_LABEL_INDEX
 
         for X, Y in data:
             for t in range(len(X)):
                 x_features = self.get_x_features_from_template(X, t)
                 y = Y[t]
-                y_prev = Y[t - 1] if t > 0 else Y_START_LABEL
+                y_prev = Y[t - 1] if t > 0 else START_LABEL
 
                 if y not in self.labels_dict:
                     self.labels_dict[y] = len(self.labels_dict)
 
                 y_idx = self.labels_dict[y]
                 y_prev_idx = self.labels_dict[y_prev]
-                y_features = [(y_prev_idx, y_idx), (Y_NONE_LABEL_INDEX, y_idx)]
+                y_features = [(y_prev_idx, y_idx), (NONE_LABEL_INDEX, y_idx)]
 
                 self.fill_features(x_features, y_features)
 
