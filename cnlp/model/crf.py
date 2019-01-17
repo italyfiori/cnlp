@@ -14,23 +14,20 @@ Y_NONE_LABEL_INDEX = -1
 
 
 class Crf(object):
-    features_dict = None  # { x_feature : { y_feature : feature_id } }
-    features_counts = None  # np array { feature_id : counts }
-    labels_dict = None  # 特征标签dict { y_feature: y_feature_id}
+    features_dict = None  # { x_feature : { (y_prev, y) : feature_id } }
+    labels_dict = None  # 特征标签dict { y: y_id}
+    features_counts = None  # numpy array { feature_id : counts }
     weights = None
-    features = None
 
     def __init__(self):
         pass
 
     # 训练模型
     def train(self, data):
-        self.features_dict = {}  # { x_feature : { y_feature : feature_id } }
-        self.features_counts = None  # { feature_id : counts }
-        self.labels_dict = {}  # 特征标签dict { y : y_id}
+        self.features_dict = {}
+        self.labels_dict = {}
 
-        self.generate_feature_dict(data)
-
+        self.generate_features(data)
         self.weights = np.zeros((len(self.features_counts), 1))
 
     # 预测标记
@@ -40,7 +37,6 @@ class Crf(object):
     # 计算似然函数和梯度
     def calc_likelihood_and_gradient(self, data, weights, features_counts, squared_sigma):
         """
-
         :param data: 训练集
         :param weights: 特征函数权重
         :param features_counts: 特征函数的经验概率
@@ -81,10 +77,10 @@ class Crf(object):
 
     def generate_seq_trans_matrix(self, weights, X):
         """
-        计算X在所有时刻的转移概率矩阵组成的列表
+        计算观测序列X在所有时刻的转移概率矩阵组成的列表
         :param weights: 特征函数权重
         :param X: 观测序列X
-        :return: 所有时刻的转移概率矩阵组成的列表，大小为T * (labels_num, labels_num)， t时刻的转移概率矩阵为: Mt(yt_prev, yt|X)
+        :return: X在所有时刻的转移概率矩阵列表[ Mt(yt_prev, yt|X) ]，大小为(T, labels_num, labels_num)
         """
         trans_matrix_list = []
 
@@ -96,12 +92,11 @@ class Crf(object):
 
     def generate_trans_matrix(self, weights, X, t):
         """
-        计算X在t时刻的转移概率矩阵
-        计算转移概率矩阵: Mi(yi_prev, yi|X)
+        计算观测序列在t时刻的转移概率矩阵
         :param weights: 特征函数权重
         :param X: 观测序列X
         :param t: 时刻t
-        :return: 转移概率矩阵, 大小为(labels_num, labels_num), M(y_prev, y|X)
+        :return: 转移概率矩阵M(y_prev, y|X), 大小为(labels_num, labels_num),
         """
         labels_num = len(self.labels_dict)
         trans_matrix = np.zeros(labels_num, labels_num)
@@ -125,25 +120,26 @@ class Crf(object):
 
     def forward_backward(self, X, trans_matrix_list):
         """
-        计算前向概率、后向概率和归一化因子
-        :param X: 观测序列X (T, 1)
-        :param trans_matrix_list: (T )
-        :return: 前向概率alpha矩阵(T+1, labels_num), 后向概率矩阵beta(T+1, labels_num), 归一化因子Z(标量)
+        计算观测序列X的前向概率、后向概率和归一化因子
+        :param X: 观测序列X, 大小为 ( T )
+        :param trans_matrix_list: X在所有时刻的转移概率矩阵列表[ Mt(yt_prev, yt|X) ]，大小为(T, labels_num, labels_num)
+        :return: 观测序列X的前向概率矩阵alpha(T+1, labels_num), 后向概率矩阵beta(T+1, labels_num), 归一化因子Z(标量)
         """
         matrix_len = len(X) + 1
-        alpha_matrix = np.zeros((matrix_len, len(self.labels_dict)))  # T + 1 * labels_num
-        beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))  # T + 1 * labels_num
+        alpha_matrix = np.zeros((matrix_len, len(self.labels_dict)))
+        beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))
 
+        # 计算前向概率
         alpha_matrix[0][Y_START_LABEL_INDEX] = 1.0
         for t in range(1, matrix_len):
-            # alpha_matrix[t].shape: labels_num * 1,
-            # trans_matrix_list.shape: labels_num * labels *num
             alpha_matrix[t] = np.dot(alpha_matrix[t - 1].T, trans_matrix_list[t - 1])
 
+        # 计算后向概率
         beta_matrix[-1] = 1.0
         for t in range(matrix_len - 2, -1, -1):
             beta_matrix[t] = np.dot(trans_matrix_list[t], beta_matrix[t + 1])
 
+        # 归一化因子
         Z = sum(alpha_matrix[-1])
         return alpha_matrix, beta_matrix, Z
 
@@ -154,31 +150,6 @@ class Crf(object):
     # 计算模型
     def load_model(self):
         pass
-
-    def generate_feature_dict(self, data):
-        """
-        生成特征函数词典和标记的词典，用于辅助计算
-        :param data:
-        :return:
-        """
-        self.labels_dict[Y_START_LABEL] = Y_START_LABEL_INDEX
-
-        for X, Y in data:
-            for t in range(len(X)):
-                x_features = self.get_x_features_from_template(X, t)
-                y = Y[t]
-                y_prev = Y[t - 1] if t > 0 else Y_START_LABEL
-
-                # 生成状态词典, 形式为 { y : y_id }
-                if y not in self.labels_dict:
-                    self.labels_dict[y] = len(self.labels_dict)
-
-                y_idx = self.labels_dict[y]
-                y_prev_idx = self.labels_dict[y_prev]
-                y_features = [(y_prev_idx, y_idx), (Y_NONE_LABEL_INDEX, y_idx)]
-
-                # 生成特征函数的词典, 形式为 { x_feature : { y_feature : feature_id } }
-                self.fill_features_dict(x_features, y_features)
 
     def data2features(self, data):
         """
@@ -193,11 +164,40 @@ class Crf(object):
 
         return data_features
 
-    def fill_features_dict(self, x_features, y_features):
+    def generate_features(self, data):
         """
-        生成保存特征函数的词典和特征函数的计数器
-        词典形式为: { x_feature : { (y_prev, y) : feature_id } }
-        计数器形式为: { feature_id : counts }
+        生成表示特征函数的相关变量
+        self.labels_dict: { y : y_id}
+        self.features_dict: { x_feature : { (y_prev_id, y_id) : feature_id } }
+        self.features_counts: { feature_id : counts }
+        :param data:
+        :return:
+        """
+        self.labels_dict[Y_START_LABEL] = Y_START_LABEL_INDEX
+
+        for X, Y in data:
+            for t in range(len(X)):
+                x_features = self.get_x_features_from_template(X, t)
+                y = Y[t]
+                y_prev = Y[t - 1] if t > 0 else Y_START_LABEL
+
+                if y not in self.labels_dict:
+                    self.labels_dict[y] = len(self.labels_dict)
+
+                y_idx = self.labels_dict[y]
+                y_prev_idx = self.labels_dict[y_prev]
+                y_features = [(y_prev_idx, y_idx), (Y_NONE_LABEL_INDEX, y_idx)]
+
+                self.fill_features(x_features, y_features)
+
+        # features_counts 转换成1d array
+        self.features_counts = np.array(list(self.features_counts))
+
+    def fill_features(self, x_features, y_features):
+        """
+        填充表示特征函数的相关变量
+        self.features_dict: { x_feature : { (y_prev_id, y_id) : feature_id } }
+        self.features_counts: { feature_id : counts }
         :param x_features:
         :param y_features:
         :return:
@@ -218,7 +218,7 @@ class Crf(object):
 
     def get_feature_funcs_from_dict(self, X, t):
         """
-        根据特征词典提取获观测序列X在t时刻对应的特征函数集合: { (y_prev, y) : feature_ids }
+        根据特征模板和词典提取获观测序列X在t时刻对应的特征函数集合: { (y_prev_id, y_id) : feature_ids }
         :param X:
         :param t:
         :return:
