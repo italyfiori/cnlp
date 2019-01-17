@@ -16,6 +16,7 @@ Y_NONE_LABEL_INDEX = -1
 class Crf(object):
     features_dict = None  # { x_feature : { (y_prev, y) : feature_id } }
     labels_dict = None  # 特征标签dict { y: y_id}
+    labels_index = {}
     features_counts = None  # numpy array { feature_id : counts }
     weights = None
 
@@ -26,13 +27,47 @@ class Crf(object):
     def train(self, data):
         self.features_dict = {}
         self.labels_dict = {}
+        self.labels_index = {}
 
         self.generate_features(data)
         self.weights = np.zeros((len(self.features_counts), 1))
 
     # 预测标记
-    def predict(self, X):
-        pass
+    def predict(self, observe_seq):
+        # 计算观测序列的转移概率矩阵序列
+        trans_matrix_list = self.generate_trans_matrix_list(observe_seq)
+
+        # 保存状态路径的最大值概率值, 和最优状态路径
+        viterbi_matrix = []
+        viterbi_path = {}
+
+        viterbi_matrix.append({})
+        for label in self.labels_index:
+            viterbi_matrix[0][label] = trans_matrix_list[0][Y_START_LABEL_INDEX, label]
+            viterbi_path[label] = [label]
+
+        for t in range(1, len(observe_seq)):
+            # 防止路径联合概率过小
+            if sum(viterbi_matrix[-1].values()) < 1e-100:
+                viterbi_matrix[-1] = {label: prob * 1e100 for label, prob in
+                                      viterbi_matrix[-1].items()}
+
+            trans_matrix = trans_matrix_list[t]
+            viterbi_matrix.append({})
+            viterbi_path_tmp = {}
+
+            for cur_label in self.labels_index:
+                cur_prob, prev_label = max([(viterbi_matrix[-1][cur_label] * trans_matrix[t][prev_label, cur_label], prev_label)
+                                            for prev_label in self.labels_index])
+
+                viterbi_matrix[t][cur_label] = cur_prob
+                viterbi_path_tmp[cur_label] = viterbi_path[prev_label] + [cur_label]
+
+            viterbi_path = viterbi_path_tmp
+
+        last_prob, last_label = max(
+            [(viterbi_matrix[-1][label], label) for label in self.labels_index])
+        return viterbi_path[last_label]
 
     # 计算似然函数和梯度
     def calc_likelihood_and_gradient(self, data, weights, features_counts, squared_sigma):
@@ -49,7 +84,7 @@ class Crf(object):
         total_Z = 0
         for X, _ in data:
             # 计算转移概率矩阵
-            trans_matrix_list = self.generate_seq_trans_matrix(weights, X)
+            trans_matrix_list = self.generate_trans_matrix_list(weights, X)
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z = self.forward_backward(X, trans_matrix_list)
             # 归一化因子加和
@@ -75,7 +110,7 @@ class Crf(object):
 
         return likelihood, gradient
 
-    def generate_seq_trans_matrix(self, weights, X):
+    def generate_trans_matrix_list(self, weights, X):
         """
         计算观测序列X在所有时刻的转移概率矩阵组成的列表
         :param weights: 特征函数权重
@@ -106,7 +141,7 @@ class Crf(object):
             # 特征函数与权重的内积
             weights_sum = [weights[feature_id] for feature_id in feature_ids]
             if y_prev != Y_NONE_LABEL_INDEX:
-                trans_matrix[y_prev, y] = weights_sum
+                trans_matrix[y_prev, y] += weights_sum
 
         if t == 0:
             # 起始时刻， y_prev都为START状态， 其他状态的转移概率为0
@@ -192,6 +227,8 @@ class Crf(object):
 
         # features_counts 转换成1d array
         self.features_counts = np.array(list(self.features_counts))
+        # {label_id: label}
+        self.labels_index = {label_id: label for label, label_id in self.labels_dict.items()}
 
     def fill_features(self, x_features, y_features):
         """
