@@ -189,28 +189,27 @@ class Crf(object):
         :param trans_matrix_list: X在所有时刻的转移概率矩阵列表[ Mt(yt_prev, yt|X) ]，大小为(T, labels_num, labels_num)
         :return: 观测序列X的前向概率矩阵alpha(T+1, labels_num), 后向概率矩阵beta(T+1, labels_num), 归一化因子Z(标量)
         """
-        matrix_len = len(X) + 1
+        matrix_len = len(X)
         alpha_matrix = np.zeros((matrix_len, len(self.labels_dict)))
         beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))
         scale_matrix = np.ones((matrix_len,))
 
         # 计算前向概率
-        alpha_matrix[0, START_LABEL_INDEX] = 1.0
-        # for t in range(1, matrix_len):
+        alpha_matrix[0, :] = trans_matrix_list[0][START_LABEL_INDEX, :]
+
         t = 1
         while t < matrix_len:
             alpha_matrix[t] = np.dot(alpha_matrix[t - 1].T, trans_matrix_list[t - 1])
             if np.any(alpha_matrix[t] > SCALE_MAX_THRESHOLD):
-                # print('overflow max')
-                alpha_matrix[t-1] /= SCALE_MAX_THRESHOLD
-                scale_matrix[t-1] = SCALE_MAX_THRESHOLD
+                alpha_matrix[t - 1] /= SCALE_MAX_THRESHOLD
+                scale_matrix[t - 1] = SCALE_MAX_THRESHOLD
             else:
                 t += 1
 
         # 计算后向概率
         beta_matrix[-1, :] = 1.0
         for t in range(matrix_len - 2, -1, -1):
-            beta_matrix[t] = np.dot(trans_matrix_list[t], beta_matrix[t + 1])
+            beta_matrix[t] = np.dot(trans_matrix_list[t + 1], beta_matrix[t + 1])
             beta_matrix[t] /= scale_matrix[t]
 
         # 归一化因子
