@@ -27,7 +27,7 @@ class Crf(object):
         self.weights = None  # 特征权重
         self.squared_sigma = 10.0
 
-    def train(self, data, rate=0.001, squared_sigma=10.0):
+    def train(self, data, rate=0.001, iterations=100, squared_sigma=10.0):
         self.features_dict = {}
         self.labels_dict = {}
         self.labels_index = {}
@@ -37,7 +37,7 @@ class Crf(object):
 
         weights = np.zeros((len(self.features_counts)))
 
-        for i in range(10):
+        for i in range(iterations):
             likelihood, gradients = self.calc_likelihood_and_gradient(data, weights,
                                                                       self.features_counts,
                                                                       squared_sigma)
@@ -109,7 +109,7 @@ class Crf(object):
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z, scale_matrix = self.forward_backward(X, trans_matrix_list)
 
-            total_Z += math.log(Z)
+            total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
 
             for t in range(len(X)):
                 # 观测序列X在t时刻的特征函数集合
