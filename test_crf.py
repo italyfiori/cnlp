@@ -14,11 +14,7 @@ test_file = 'cnlp/data/chunking_small/small_test.data'
 
 train_data = Corpus.read_crf_corpus(train_file)
 crf = Crf()
-crf.train(train_data, rate=0.01, iterations=100)
-print(crf.weights[:100])
-
-
-# exit()
+crf.train(train_data, rate=0.01, iterations=50)
 
 
 def test(test_file):
@@ -28,8 +24,6 @@ def test(test_file):
     correct_count = 0
     for X, Y in test_data:
         Yprime = crf.predict(X)
-        print(Yprime)
-        exit()
         for t in range(len(Y)):
             total_count += 1
             if Y[t] == Yprime[t]:
