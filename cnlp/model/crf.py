@@ -39,7 +39,7 @@ class Crf(object):
         for i in range(iterations):
             likelihood, gradients = self.calc_likelihood_and_gradient(data, self.weights,
                                                                       self.features_counts,
-                                                                      squared_sigma)
+                                                                      squared_sigma, i)
 
             l2 = np.sum(np.square(gradients))
             print(i, 'likelihood:', likelihood, 'l2:', l2)
@@ -90,7 +90,7 @@ class Crf(object):
         return [self.labels_index[label] for label in label_path]
 
     # 计算似然函数和梯度
-    def calc_likelihood_and_gradient(self, data, weights, empirical_counts, squared_sigma):
+    def calc_likelihood_and_gradient(self, data, weights, empirical_counts, squared_sigma, it):
         """
         :param data: 训练集
         :param weights: 特征函数权重
@@ -107,7 +107,6 @@ class Crf(object):
             trans_matrix_list = self.generate_trans_matrix_list(weights, X)
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z, scale_matrix = self.forward_backward(X, trans_matrix_list)
-
             total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
 
             for t in range(len(X)):
@@ -159,7 +158,7 @@ class Crf(object):
             trans_matrix_list[t] = self.generate_trans_matrix(weights, _X, t)
 
         # return trans_matrix_list
-        return trans_matrix_list.clip(0.0, 1.0)
+        return trans_matrix_list
 
     def generate_trans_matrix(self, weights, X, t):
         """
@@ -210,7 +209,7 @@ class Crf(object):
         # 计算前向概率, 省略了start时刻
         alpha_matrix[0, :] = trans_matrix_list[0][self.LABEL_INDEX_START, :]
         for t in range(1, matrix_len):
-            alpha_matrix[t] = np.dot(alpha_matrix[t - 1, :], trans_matrix_list[t - 1])
+            alpha_matrix[t] = np.dot(alpha_matrix[t - 1, :], trans_matrix_list[t])
 
             if any(alpha_matrix[t] > MAX_SCALE_THRESHOLD):
                 print('come here')
@@ -267,7 +266,7 @@ class Crf(object):
                 if y not in self.labels_dict:
                     self.labels_dict[y] = len(self.labels_dict)
 
-        self.labels_dict[self.LABEL_END] = self.LABEL_INDEX_END = len(self.labels_dict)
+        # self.labels_dict[self.LABEL_END] = self.LABEL_INDEX_END = len(self.labels_dict)
         self.labels_index = {label_id: label for label, label_id in self.labels_dict.items()}
 
         for X, Y in data:
