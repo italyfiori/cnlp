@@ -27,7 +27,7 @@ class Crf(object):
         self.weights = None  # 特征权重
         self.squared_sigma = 10.0
 
-    def train(self, data, rate=0.001, iterations=100, squared_sigma=10.0):
+    def train(self, data, rate=0.0002, iterations=100, squared_sigma=10.0):
         self.features_dict = {}
         self.labels_dict = {}
         self.labels_index = {}
@@ -109,7 +109,8 @@ class Crf(object):
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z, scale_matrix = self.forward_backward(X, trans_matrix_list)
 
-            total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
+            # total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
+            total_Z += math.log(Z)
 
             for t in range(len(X)):
                 # 观测序列X在t时刻的特征函数集合
@@ -148,7 +149,7 @@ class Crf(object):
         for t in range(len(_X)):
             trans_matrix_list[t] = self.generate_trans_matrix(weights, _X, t)
 
-        return trans_matrix_list
+        return trans_matrix_list.clip(0.0, 1.0)
 
     def generate_trans_matrix(self, weights, X, t):
         """
