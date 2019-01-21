@@ -66,8 +66,8 @@ class Crf(object):
 
         for t in range(1, len(X)):
             # 防止路径联合概率过大
-            if sum(viterbi_matrix[-1].values()) > 1e250:
-                viterbi_matrix[-1] = {label: prob * 1e-250 for label, prob in
+            if max(viterbi_matrix[-1].values()) > MAX_SCALE_THRESHOLD:
+                viterbi_matrix[-1] = {label: prob / MAX_SCALE_THRESHOLD for label, prob in
                                       viterbi_matrix[-1].items()}
 
             trans_matrix = trans_matrix_list[t]
@@ -90,16 +90,16 @@ class Crf(object):
         return [self.labels_index[label] for label in label_path]
 
     # 计算似然函数和梯度
-    def calc_likelihood_and_gradient(self, data, weights, empirical_counts, squared_sigma, it):
+    def calc_likelihood_and_gradient(self, data, weights, features_empirical_counts, squared_sigma, it):
         """
         :param data: 训练集
         :param weights: 特征函数权重
-        :param empirical_counts: 特征函数的经验概率
+        :param features_empirical_counts: 特征函数的经验概率
         :param squared_sigma: 惩罚因子
         :return: 似然函数值和梯度
         """
         # 初始化特征函数的数学期望
-        feature_expects = np.zeros((len(empirical_counts)))
+        features_expect_counts = np.zeros((len(features_empirical_counts)))
 
         total_Z = 0
         for X, _ in data:
@@ -131,17 +131,16 @@ class Crf(object):
                         feature_prob = alpha_matrix[t - 1, y_prev] * trans_matrix[y_prev, y] * \
                                        beta_matrix[t, y] / Z
 
-                    # todo 问题所在
                     # 计算特征函数的数学期望
                     for feature_id in feature_ids:
-                        feature_expects[feature_id] += feature_prob
+                        features_expect_counts[feature_id] += feature_prob
 
         # 计算似然函数值(标量)
-        likelihood = np.dot(empirical_counts.T, weights) - total_Z - np.sum(
+        likelihood = np.dot(features_empirical_counts.T, weights) - total_Z - np.sum(
             np.dot(weights, weights)) / (squared_sigma * 2)
 
         # 计算梯度(向量)
-        gradient = empirical_counts - feature_expects - weights / squared_sigma
+        gradient = features_empirical_counts - features_expect_counts - weights / squared_sigma
 
         return -likelihood, gradient
 
@@ -208,7 +207,6 @@ class Crf(object):
         # 计算前向概率, 省略了start时刻
         alpha_matrix[0, :] = trans_matrix_list[0][self.LABEL_INDEX_START, :]
 
-        # todo maybe error
         for t in range(1, matrix_len):
             alpha_matrix[t] = np.dot(alpha_matrix[t - 1, :], trans_matrix_list[t])
 
