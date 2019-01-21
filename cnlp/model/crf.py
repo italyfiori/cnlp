@@ -90,16 +90,16 @@ class Crf(object):
         return [self.labels_index[label] for label in label_path]
 
     # 计算似然函数和梯度
-    def calc_likelihood_and_gradient(self, data, weights, features_counts, squared_sigma):
+    def calc_likelihood_and_gradient(self, data, weights, empirical_counts, squared_sigma):
         """
         :param data: 训练集
         :param weights: 特征函数权重
-        :param features_counts: 特征函数的经验概率
+        :param empirical_counts: 特征函数的经验概率
         :param squared_sigma: 惩罚因子
         :return: 似然函数值和梯度
         """
         # 初始化特征函数的数学期望
-        feature_expects = np.zeros((len(features_counts)))
+        feature_expects = np.zeros((len(empirical_counts)))
 
         total_Z = 0
         for X, _ in data:
@@ -108,32 +108,39 @@ class Crf(object):
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z, scale_matrix = self.forward_backward(X, trans_matrix_list)
 
-            # total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
-            total_Z += math.log(Z)
+            total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
 
             for t in range(len(X)):
+                trans_matrix = trans_matrix_list[t]
+
                 # 观测序列X在t时刻的特征函数集合
                 feature_funcs = self.get_feature_funcs_from_dict(X, t)
                 for (y_prev, y), feature_ids in feature_funcs.items():
-                    # 计算概率 P(yi_prev, yi|X)
-                    if y_prev == self.LABEL_INDEX_NONE:
+
+                    if t == 0 and y_prev is not self.LABEL_INDEX_START and y_prev is not self.LABEL_INDEX_NONE:
+                        continue
+                    if t > 0 and y_prev is self.LABEL_INDEX_START:
+                        continue
+
+                    if t == 0 and y_prev is self.LABEL_INDEX_START:
+                        feature_prob = trans_matrix[self.LABEL_INDEX_START, y] * beta_matrix[
+                            t, y] / Z
+                    elif y_prev is self.LABEL_INDEX_NONE:
                         feature_prob = alpha_matrix[t, y] * beta_matrix[t, y] * scale_matrix[t] / Z
                     else:
-                        feature_prob = alpha_matrix[t - 1, y_prev] * trans_matrix_list[t][
-                            y_prev, y] * \
+                        feature_prob = alpha_matrix[t - 1, y_prev] * trans_matrix[y_prev, y] * \
                                        beta_matrix[t, y] / Z
 
-                    # 计算特征函数的数学期望
-                    for feature_id in feature_ids:
-                        feature_expects[feature_id] += feature_prob
+                # 计算特征函数的数学期望
+                for feature_id in feature_ids:
+                    feature_expects[feature_id] += feature_prob
 
         # 计算似然函数值(标量)
-        likelihood = np.dot(features_counts.T, weights) - total_Z - np.sum(
-            np.dot(weights, weights)) / (
-                             squared_sigma * 2)
+        likelihood = np.dot(empirical_counts.T, weights) - total_Z - np.sum(
+            np.dot(weights, weights)) / (squared_sigma * 2)
 
         # 计算梯度(向量)
-        gradient = features_counts - feature_expects - weights / squared_sigma
+        gradient = empirical_counts - feature_expects - weights / squared_sigma
 
         return -likelihood, gradient
 
@@ -144,7 +151,8 @@ class Crf(object):
         :param X: 观测序列X
         :return: X在所有时刻的转移概率矩阵列表 M(start, y0), M(y0, y1), ... , M(yn-1, end)
         """
-        _X = X + [self.OBSERVE_END]
+        # _X = X + [self.OBSERVE_END]
+        _X = X
         trans_matrix_list = np.zeros((len(_X), len(self.labels_dict), len(self.labels_dict)))
 
         for t in range(len(_X)):
@@ -173,35 +181,15 @@ class Crf(object):
                 trans_matrix[:, y] += weights_sum
             else:
                 trans_matrix[y_prev, y] += weights_sum
-        # for y in self.labels_index:
-        #     for y_prev in self.labels_index:
-        #         # 局部特征函数
-        #         if (y_prev, y) in feature_funcs:
-        #             feature_ids = feature_funcs[(y_prev, y)]
-        #             weights_sum = sum([weights[feature_id] for feature_id in feature_ids])
-        #             trans_matrix[y_prev, y] += weights_sum
-        #
-        #         # 节点特征函数
-        #         if (None, y) in feature_funcs:
-        #             feature_ids = feature_funcs[(None, y)]
-        #             weights_sum = sum([weights[feature_id] for feature_id in feature_ids])
-        #             trans_matrix[y_prev, y] += weights_sum
 
         trans_matrix = np.exp(trans_matrix)
         if t == 0:
-            # 0时刻(对应观测序列的第一个状态)， y_prev都为START状态， 且 y不能为END状态
+            # 0时刻,y_prev都为START状态
             trans_matrix[self.LABEL_INDEX_START + 1:] = 0
-            trans_matrix[:, self.LABEL_INDEX_END] = 0
-        elif t == len(X) - 1:
-            # END状态时刻(对应观测序列结束后的END状态), y都为END状态 且 y_prev状态不能为START
-            trans_matrix[:, 0:self.LABEL_INDEX_END] = 0
-            trans_matrix[self.LABEL_INDEX_START, :] = 0
         else:
-            # 中间时刻, y_prev和y都不能为START或END状态
+            # 其他时刻, y_prev和y都不能为START状态
             trans_matrix[:, self.LABEL_INDEX_START] = 0
             trans_matrix[self.LABEL_INDEX_START, :] = 0
-            trans_matrix[:, self.LABEL_INDEX_END] = 0
-            trans_matrix[self.LABEL_INDEX_END, :] = 0
 
         return trans_matrix
 
@@ -213,26 +201,29 @@ class Crf(object):
         :return: 观测序列X的前向概率矩阵alpha(T+1, labels_num), 后向概率矩阵beta(T+1, labels_num), 归一化因子Z(标量)
         """
         matrix_len = len(X)
-        assert matrix_len == len(trans_matrix_list) - 1
+        assert matrix_len == len(trans_matrix_list)
 
         alpha_matrix = np.zeros((matrix_len, len(self.labels_dict)))
-        beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))
+
         scale_matrix = np.ones((matrix_len,))
 
         # 计算前向概率, 省略了start时刻
         alpha_matrix[0, :] = trans_matrix_list[0][self.LABEL_INDEX_START, :]
         for t in range(1, matrix_len):
-            alpha_matrix[t] = np.dot(alpha_matrix[t - 1].T, trans_matrix_list[t - 1])
+            alpha_matrix[t] = np.dot(alpha_matrix[t - 1, :], trans_matrix_list[t - 1])
 
             if any(alpha_matrix[t] > MAX_SCALE_THRESHOLD):
+                print('come here')
                 alpha_matrix[t] /= MAX_SCALE_THRESHOLD
                 scale_matrix[t] = MAX_SCALE_THRESHOLD
 
         # 计算后向概率, 省略了end时刻
-        beta_matrix[-1, :] = trans_matrix_list[matrix_len][:, self.LABEL_INDEX_END]
+        # beta_matrix[-1, :] = trans_matrix_list[matrix_len][:, self.LABEL_INDEX_END]
+        beta_matrix = np.zeros((matrix_len, len(self.labels_dict)))
+        beta_matrix[-1, :] = 1.0
         for t in range(matrix_len - 2, -1, -1):
-            beta_matrix[t] = np.dot(trans_matrix_list[t + 1], beta_matrix[t + 1])
-            beta_matrix[t] /= MAX_SCALE_THRESHOLD
+            beta_matrix[t] = np.dot(trans_matrix_list[t + 1], beta_matrix[t + 1, :])
+            beta_matrix[t] /= scale_matrix[t]
 
         # 归一化因子
         Z = sum(alpha_matrix[-1])
@@ -280,8 +271,6 @@ class Crf(object):
         self.labels_index = {label_id: label for label, label_id in self.labels_dict.items()}
 
         for X, Y in data:
-            X.append(self.OBSERVE_END)
-            Y.append(self.LABEL_END)
             for t in range(len(X)):
                 x_features = self.get_x_features_from_template(X, t)
 
@@ -315,8 +304,6 @@ class Crf(object):
 
                 feature_id = self.features_dict[x_feature][y_feature]
                 self.features_counts[feature_id] = self.features_counts.get(feature_id, 0) + 1
-                if self.features_counts[feature_id] == 0:
-                    print('feature_id', feature_id)
 
     def get_feature_funcs_from_dict(self, X, t):
         """
