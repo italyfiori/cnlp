@@ -110,15 +110,6 @@ class Crf(object):
 
             total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
 
-            # if it == 0:
-            #     print(alpha_matrix[-1])
-            #     print(beta_matrix[0])
-            #     print(beta_matrix[0].shape)
-            #     print(trans_matrix_list[0])
-            #     print(trans_matrix_list[-1])
-            #     print(trans_matrix_list[-1].shape)
-            #     exit()
-
             for t in range(len(X)):
                 trans_matrix = trans_matrix_list[t]
 
@@ -151,9 +142,7 @@ class Crf(object):
 
         # 计算梯度(向量)
         gradient = empirical_counts - feature_expects - weights / squared_sigma
-        # print(feature_expects[-100:])
-        # print(len(feature_expects))
-        # exit()
+
         return -likelihood, gradient
 
     def generate_trans_matrix_list(self, weights, X):
@@ -163,7 +152,6 @@ class Crf(object):
         :param X: 观测序列X
         :return: X在所有时刻的转移概率矩阵列表 M(start, y0), M(y0, y1), ... , M(yn-1, end)
         """
-        # _X = X + [self.OBSERVE_END]
         _X = X
         trans_matrix_list = np.zeros((len(_X), len(self.labels_dict), len(self.labels_dict)))
 
@@ -185,7 +173,6 @@ class Crf(object):
 
         feature_funcs = self.get_feature_funcs_from_dict(X, t)
         for (y_prev, y), feature_ids in feature_funcs.items():
-            # print(weights)
             weights_sum = sum([weights[feature_id] for feature_id in feature_ids])
 
             if y_prev == self.LABEL_INDEX_NONE:
