@@ -107,6 +107,10 @@ class Crf(object):
             trans_matrix_list = self.generate_trans_matrix_list(weights, X)
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z, scale_matrix = self.forward_backward(X, trans_matrix_list)
+            if it == 1:
+                print(alpha_matrix[-1])
+                print(beta_matrix[0])
+                exit()
             total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
 
             for t in range(len(X)):
@@ -130,6 +134,7 @@ class Crf(object):
                         feature_prob = alpha_matrix[t - 1, y_prev] * trans_matrix[y_prev, y] * \
                                        beta_matrix[t, y] / Z
 
+                # todo 问题所在
                 # 计算特征函数的数学期望
                 for feature_id in feature_ids:
                     feature_expects[feature_id] += feature_prob
@@ -140,7 +145,9 @@ class Crf(object):
 
         # 计算梯度(向量)
         gradient = empirical_counts - feature_expects - weights / squared_sigma
-
+        print(feature_expects[-100:])
+        print(len(feature_expects))
+        exit()
         return -likelihood, gradient
 
     def generate_trans_matrix_list(self, weights, X):
@@ -157,7 +164,6 @@ class Crf(object):
         for t in range(len(_X)):
             trans_matrix_list[t] = self.generate_trans_matrix(weights, _X, t)
 
-        # return trans_matrix_list
         return trans_matrix_list
 
     def generate_trans_matrix(self, weights, X, t):
@@ -208,11 +214,11 @@ class Crf(object):
 
         # 计算前向概率, 省略了start时刻
         alpha_matrix[0, :] = trans_matrix_list[0][self.LABEL_INDEX_START, :]
+
         for t in range(1, matrix_len):
             alpha_matrix[t] = np.dot(alpha_matrix[t - 1, :], trans_matrix_list[t])
 
             if any(alpha_matrix[t] > MAX_SCALE_THRESHOLD):
-                print('come here')
                 alpha_matrix[t] /= MAX_SCALE_THRESHOLD
                 scale_matrix[t] = MAX_SCALE_THRESHOLD
 

@@ -14,7 +14,7 @@ test_file = 'cnlp/data/chunking_small/small_test.data'
 
 train_data = Corpus.read_crf_corpus(train_file)
 crf = Crf()
-crf.train(train_data, rate=0.001, iterations=10)
+crf.train(train_data, rate=0.01, iterations=100)
 print(crf.weights[:100])
 
 
