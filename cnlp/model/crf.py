@@ -107,11 +107,17 @@ class Crf(object):
             trans_matrix_list = self.generate_trans_matrix_list(weights, X)
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z, scale_matrix = self.forward_backward(X, trans_matrix_list)
-            if it == 0:
-                print(alpha_matrix[-1])
-                print(beta_matrix[0])
-                exit()
+
             total_Z += math.log(Z) + np.sum(np.log(scale_matrix))
+
+            # if it == 0:
+            #     print(alpha_matrix[-1])
+            #     print(beta_matrix[0])
+            #     print(beta_matrix[0].shape)
+            #     print(trans_matrix_list[0])
+            #     print(trans_matrix_list[-1])
+            #     print(trans_matrix_list[-1].shape)
+            #     exit()
 
             for t in range(len(X)):
                 trans_matrix = trans_matrix_list[t]
@@ -134,10 +140,10 @@ class Crf(object):
                         feature_prob = alpha_matrix[t - 1, y_prev] * trans_matrix[y_prev, y] * \
                                        beta_matrix[t, y] / Z
 
-                # todo 问题所在
-                # 计算特征函数的数学期望
-                for feature_id in feature_ids:
-                    feature_expects[feature_id] += feature_prob
+                    # todo 问题所在
+                    # 计算特征函数的数学期望
+                    for feature_id in feature_ids:
+                        feature_expects[feature_id] += feature_prob
 
         # 计算似然函数值(标量)
         likelihood = np.dot(empirical_counts.T, weights) - total_Z - np.sum(
