@@ -107,7 +107,7 @@ class Crf(object):
             trans_matrix_list = self.generate_trans_matrix_list(weights, X)
             # 计算前向后向概率
             alpha_matrix, beta_matrix, Z, scale_matrix = self.forward_backward(X, trans_matrix_list)
-            if it == 1:
+            if it == 0:
                 print(alpha_matrix[-1])
                 print(beta_matrix[0])
                 exit()
@@ -145,9 +145,9 @@ class Crf(object):
 
         # 计算梯度(向量)
         gradient = empirical_counts - feature_expects - weights / squared_sigma
-        print(feature_expects[-100:])
-        print(len(feature_expects))
-        exit()
+        # print(feature_expects[-100:])
+        # print(len(feature_expects))
+        # exit()
         return -likelihood, gradient
 
     def generate_trans_matrix_list(self, weights, X):
@@ -215,6 +215,7 @@ class Crf(object):
         # 计算前向概率, 省略了start时刻
         alpha_matrix[0, :] = trans_matrix_list[0][self.LABEL_INDEX_START, :]
 
+        # todo maybe error
         for t in range(1, matrix_len):
             alpha_matrix[t] = np.dot(alpha_matrix[t - 1, :], trans_matrix_list[t])
 
