@@ -34,17 +34,16 @@ class Crf(object):
         self.features_counts = {}
 
         self.generate_features(data)
-
-        weights = np.zeros((len(self.features_counts)))
+        self.weights = np.zeros(self.features_counts.shape[0])
 
         for i in range(iterations):
-            likelihood, gradients = self.calc_likelihood_and_gradient(data, weights,
+            likelihood, gradients = self.calc_likelihood_and_gradient(data, self.weights,
                                                                       self.features_counts,
                                                                       squared_sigma)
 
             l2 = np.sum(np.square(gradients))
-            print('likelihood:', likelihood, 'l2:', l2)
-            weights += rate * gradients
+            print(i, 'likelihood:', likelihood, 'l2:', l2)
+            self.weights += rate * gradients
 
     def predict(self, X):
         """
@@ -120,7 +119,8 @@ class Crf(object):
                     if y_prev == self.LABEL_INDEX_NONE:
                         feature_prob = alpha_matrix[t, y] * beta_matrix[t, y] * scale_matrix[t] / Z
                     else:
-                        feature_prob = alpha_matrix[t - 1, y_prev] * trans_matrix_list[t][y_prev, y] * \
+                        feature_prob = alpha_matrix[t - 1, y_prev] * trans_matrix_list[t][
+                            y_prev, y] * \
                                        beta_matrix[t, y] / Z
 
                     # 计算特征函数的数学期望
@@ -128,8 +128,9 @@ class Crf(object):
                         feature_expects[feature_id] += feature_prob
 
         # 计算似然函数值(标量)
-        likelihood = np.dot(features_counts.T, weights) - total_Z + np.sum(np.dot(weights, weights)) / (
-                squared_sigma * 2)
+        likelihood = np.dot(features_counts.T, weights) - total_Z - np.sum(
+            np.dot(weights, weights)) / (
+                             squared_sigma * 2)
 
         # 计算梯度(向量)
         gradient = features_counts - feature_expects - weights / squared_sigma
@@ -149,6 +150,7 @@ class Crf(object):
         for t in range(len(_X)):
             trans_matrix_list[t] = self.generate_trans_matrix(weights, _X, t)
 
+        # return trans_matrix_list
         return trans_matrix_list.clip(0.0, 1.0)
 
     def generate_trans_matrix(self, weights, X, t):
@@ -164,6 +166,7 @@ class Crf(object):
 
         feature_funcs = self.get_feature_funcs_from_dict(X, t)
         for (y_prev, y), feature_ids in feature_funcs.items():
+            # print(weights)
             weights_sum = sum([weights[feature_id] for feature_id in feature_ids])
 
             if y_prev == self.LABEL_INDEX_NONE:
@@ -291,7 +294,7 @@ class Crf(object):
                 self.fill_features(x_features, y_features)
 
         # features_counts 转换成1d array
-        self.features_counts = np.array(self.features_counts.values())
+        self.features_counts = np.array(list(self.features_counts.values()))
 
     def fill_features(self, x_features, y_features):
         """
