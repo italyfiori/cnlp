@@ -63,7 +63,7 @@ class HMM(object):
         self.trans_probs = {state_i: {state_j: 0 for state_j in states} for state_i in states}
         self.emit_probs = {state: {} for state in states}
 
-    def viterbi(self, observe_seq, default_state=None, default_end_states=None):
+    def predict(self, observe_seq, default_state=None, default_end_states=None):
         assert len(observe_seq) >= 1
         assert default_state is None or default_state in self.states
         assert default_end_states is None or len(set(default_end_states).difference(set(self.states))) == 0

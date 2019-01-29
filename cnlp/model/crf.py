@@ -370,9 +370,12 @@ class Crf(object):
                 # 取相对于当前观测位置偏移t_offset的观测值作为特征
                 x = X[t_position]
 
-                # 取特征的第v_offset位
-                assert v_offset < len(x)
-                x_feature += x[v_offset]
+                if type(x) == list or type(x) == tuple:
+                    # 取特征的第v_offset位
+                    assert v_offset < len(x)
+                    x_feature += x[v_offset]
+                else:
+                    x_feature += x
 
             if x_feature != "":
                 x_feature = str(i) + x_feature
