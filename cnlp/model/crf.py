@@ -327,10 +327,7 @@ class Crf(object):
 
     def read_feature_template(self, file_path):
         """
-        从文件中提取特征模板, 每一组模板表示为一个数组,
-        每个特征模板的形式为[(-1, 0), [0, 0], ...],
-        其中第一个元素表示相对于当前观测位置的偏移量
-        第二个元素表示观测值值的第几位(对观测值有位的情况)
+        读取CRF++形式的特征模板文件
         :param file_path:
         :return:
         """
@@ -354,7 +351,6 @@ class Crf(object):
         :param t:
         :return:
         """
-
         x_features = list()
 
         i = 0
