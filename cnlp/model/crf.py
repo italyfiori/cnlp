@@ -367,11 +367,11 @@ class Crf(object):
                     x_feature = ""
                     break
 
-                # 特征相对于观测位置的偏移量
+                # 取相对于当前观测位置偏移t_offset的观测值作为特征
                 x = X[t_position]
-                assert v_offset < len(x)
 
                 # 取特征的第v_offset位
+                assert v_offset < len(x)
                 x_feature += x[v_offset]
 
             if x_feature != "":
