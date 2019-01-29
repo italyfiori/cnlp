@@ -43,7 +43,7 @@ class Crf(object):
         for i in range(iterations):
             likelihood, gradients = self.calc_likelihood_and_gradient(data, self.weights,
                                                                       self.features_counts,
-                                                                      squared_sigma, i)
+                                                                      squared_sigma)
 
             l2 = np.sum(np.square(gradients))
             print(i, 'likelihood:', likelihood, 'l2:', l2)
@@ -94,8 +94,7 @@ class Crf(object):
         return [self.labels_index[label] for label in label_path]
 
     # 计算似然函数和梯度
-    def calc_likelihood_and_gradient(self, data, weights, features_empirical_counts, squared_sigma,
-                                     it):
+    def calc_likelihood_and_gradient(self, data, weights, features_empirical_counts, squared_sigma):
         """
         :param data: 训练集
         :param weights: 特征函数权重
