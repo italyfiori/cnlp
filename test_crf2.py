@@ -20,7 +20,9 @@ print('start read feature template')
 crf.read_feature_template(template_file)
 print('read feature template done ')
 
+print('start train')
 crf.train(corpus, rate=0.01, iterations=50)
+print('end train')
 
 x = list('中华人民共和国成立了')
 y = crf.predict(x)

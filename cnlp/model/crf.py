@@ -35,8 +35,10 @@ class Crf(object):
         self.labels_index = {}
         self.features_counts = {}
 
+        print('star generate features')
         self.generate_features(data)
         self.weights = np.zeros(self.features_counts.shape[0])
+        print('find %d features' % len(self.weights))
 
         for i in range(iterations):
             likelihood, gradients = self.calc_likelihood_and_gradient(data, self.weights,
