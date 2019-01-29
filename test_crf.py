@@ -9,15 +9,24 @@ Desc:
 from cnlp.util.corpus import Corpus
 from cnlp.model.crf import Crf
 
+# template_file = './cnlp/conf/crf_templates.txt'
+# crf = Crf()
+# templates = crf.read_feature_template(template_file)
+# exit()
+
+
+template_file = './cnlp/conf/crf_templates.txt'
 train_file = 'cnlp/data/chunking_small/small_train.data'
 test_file = 'cnlp/data/chunking_small/small_test.data'
 
 train_data = Corpus.read_crf_corpus(train_file)
 crf = Crf()
+crf.read_feature_template(template_file)
 crf.train(train_data, rate=0.01, iterations=50)
 
 
 def test(test_file):
+
     test_data = Corpus.read_crf_corpus(test_file)
 
     total_count = 0

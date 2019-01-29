@@ -7,6 +7,7 @@ Desc:
 """
 import numpy as np
 import math
+import re
 
 MAX_SCALE_THRESHOLD = 1e250
 
@@ -18,6 +19,7 @@ class Crf(object):
     LABEL_INDEX_END = None
     LABEL_INDEX_NONE = None
     OBSERVE_END = ('\n', '\n')
+    feature_templates = None
 
     def __init__(self):
         self.features_dict = None  # 特征词典 { x_feature : { (y_prev, y) : feature_id } }
@@ -90,7 +92,8 @@ class Crf(object):
         return [self.labels_index[label] for label in label_path]
 
     # 计算似然函数和梯度
-    def calc_likelihood_and_gradient(self, data, weights, features_empirical_counts, squared_sigma, it):
+    def calc_likelihood_and_gradient(self, data, weights, features_empirical_counts, squared_sigma,
+                                     it):
         """
         :param data: 训练集
         :param weights: 特征函数权重
@@ -322,39 +325,61 @@ class Crf(object):
                 feature_funcs[(y_prev, y)].add(feature_id)
         return feature_funcs
 
-    @staticmethod
-    def get_x_features_from_template(X, t):
+    def read_feature_template(self, file_path):
+        """
+        从文件中提取特征模板, 每一组模板表示为一个数组,
+        每个特征模板的形式为[(-1, 0), [0, 0], ...],
+        其中第一个元素表示相对于当前观测位置的偏移量
+        第二个元素表示观测值值的第几位(对观测值有位的情况)
+        :param file_path:
+        :return:
+        """
+        feature_templates = []
+        f = open(file_path)
+        lines = f.readlines()
+        pattern = re.compile(r'%x\[(-?\d),(-?\d)]')
+
+        for line in lines:
+            feature_positions = pattern.findall(line)
+            feature_positions = [(int(x), int(y)) for x, y in feature_positions]
+            if len(feature_positions) > 0:
+                feature_templates.append(feature_positions)
+
+        self.feature_templates = feature_templates
+
+    def get_x_features_from_template(self, X, t):
         """
         从特征函数模板中获取观测序列X在t时刻的x特征集合([x_feature1, x_feature2, ...])
         :param X:
         :param t:
         :return:
         """
-        length = len(X)
+
         x_features = list()
-        x_features.append('U[0]:%s' % X[t][0])
-        x_features.append('POS_U[0]:%s' % X[t][1])
-        if t < length - 1:
-            x_features.append('U[+1]:%s' % (X[t + 1][0]))
-            x_features.append('B[0]:%s %s' % (X[t][0], X[t + 1][0]))
-            x_features.append('POS_U[1]:%s' % X[t + 1][1])
-            x_features.append('POS_B[0]:%s %s' % (X[t][1], X[t + 1][1]))
-            if t < length - 2:
-                x_features.append('U[+2]:%s' % (X[t + 2][0]))
-                x_features.append('POS_U[+2]:%s' % (X[t + 2][1]))
-                x_features.append('POS_B[+1]:%s %s' % (X[t + 1][1], X[t + 2][1]))
-                x_features.append('POS_T[0]:%s %s %s' % (X[t][1], X[t + 1][1], X[t + 2][1]))
-        if t > 0:
-            x_features.append('U[-1]:%s' % (X[t - 1][0]))
-            x_features.append('B[-1]:%s %s' % (X[t - 1][0], X[t][0]))
-            x_features.append('POS_U[-1]:%s' % (X[t - 1][1]))
-            x_features.append('POS_B[-1]:%s %s' % (X[t - 1][1], X[t][1]))
-            if t < length - 1:
-                x_features.append('POS_T[-1]:%s %s %s' % (X[t - 1][1], X[t][1], X[t + 1][1]))
-            if t > 1:
-                x_features.append('U[-2]:%s' % (X[t - 2][0]))
-                x_features.append('POS_U[-2]:%s' % (X[t - 2][1]))
-                x_features.append('POS_B[-2]:%s %s' % (X[t - 2][1], X[t - 1][1]))
-                x_features.append('POS_T[-2]:%s %s %s' % (X[t - 2][1], X[t - 1][1], X[t][1]))
+
+        i = 0
+        X_len = len(X)
+        for feature_positions in self.feature_templates:
+            i += 1
+            x_feature = ""
+            for feature_position in feature_positions:
+                t_offset = feature_position[0]
+                v_offset = feature_position[1]
+                t_position = t + t_offset
+
+                if t_position < 0 or t_position >= X_len:
+                    x_feature = ""
+                    break
+
+                # 特征相对于观测位置的偏移量
+                x = X[t_position]
+                assert v_offset < len(x)
+
+                # 取特征的第v_offset位
+                x_feature += x[v_offset]
+
+            if x_feature != "":
+                x_feature = str(i) + x_feature
+                x_features.append(x_feature)
 
         return x_features
