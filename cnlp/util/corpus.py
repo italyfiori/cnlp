@@ -32,7 +32,6 @@ class Corpus(object):
 
     @staticmethod
     def read_segment_corpus(file_path):
-        print(file_path)
         with open(file_path) as fo:
             corpus = []
             for line in fo:
