@@ -1,1 +1,1 @@
-# nlp
+# A chinese nlp library
