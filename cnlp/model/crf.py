@@ -30,6 +30,58 @@ class Crf(object):
         self.squared_sigma = 10.0
 
     def train(self, data, rate=0.0002, iterations=100, squared_sigma=10.0):
+        """
+        输入数据格式:
+        训练数据: 前2列是输入(单词和词性) 最后一列是标志
+        Confidence NN B-NP
+        in IN B-PP
+        the DT B-NP
+        pound NN I-NP
+        is VBZ B-VP
+        widely RB I-VP
+        expected VBN I-VP
+        to TO I-VP
+        take VB I-VP
+        another DT B-NP
+        sharp JJ I-NP
+        dive NN I-NP
+        if IN B-SBAR
+        trade NN B-NP
+        figures NNS I-NP
+        for IN B-PP
+        September NNP B-NP
+        , , O
+        
+        特征模板: 前2列的特征, 第1个数字对应时间便宜, 第2个数字代表列数
+        U01:%x[0,0]
+        U02:%x[0,1]
+        U03:%x[1,0]
+        U04:%x[0,0]/%x[1,0]
+        U04:%x[1,1]
+        U04:%x[0,1]/%x[1,1]
+        U04:%x[2,0]
+        U04:%x[2,1]
+        U04:%x[1,1]/%x[2,1]
+        U04:%x[0,1]/%x[1,1]/%x[2,1]
+        U04:%x[-1,0]
+        U04:%x[-1,0]/%x[0,0]
+        U04:%x[-1,1]
+        U04:%x[-1,1]/%x[0,1]
+        U04:%x[-1,1]/%x[0,1]/%x[1,1]
+        U04:%x[-2,0]
+        U04:%x[-2,1]
+        U04:%x[-2,1]/%x[-1,1]
+        U04:%x[-2,1]/%x[-1,1]/%x[0,1]
+        
+        X特征:
+        ['1_Confidence', '2_NN', '3_in', '4_Confidence_in', '5_IN', '6_NN_IN', '7_the', '8_DT', '9_IN_DT', '10_NN_IN']
+        
+        Y特征:
+        [(y_prev_idx, y_idx), (self.LABEL_INDEX_NONE, y_idx)]
+        
+        特征函数:
+        X与Y的组合
+        """
         self.features_dict = {}
         self.labels_dict = {}
         self.labels_index = {}
@@ -374,12 +426,12 @@ class Crf(object):
                 if type(x) == list or type(x) == tuple:
                     # 取特征的第v_offset位
                     assert v_offset < len(x)
-                    x_feature += x[v_offset]
+                    x_feature += '_' + x[v_offset]
                 else:
-                    x_feature += x
+                    x_feature += '_' + x
 
             if x_feature != "":
                 x_feature = str(i) + x_feature
                 x_features.append(x_feature)
-
+                
         return x_features
